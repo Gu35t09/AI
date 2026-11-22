@@ -1,0 +1,73 @@
+---
+# ==============================================================================
+# Site settings: the values you are expected to change.
+# Every other setting has a default in roles/<role>/defaults/main.yml and can
+# be overridden here.
+# ==============================================================================
+
+# Address and port of llama-swap, the single endpoint for the chat, the
+# OpenAI-compatible API and the analysis tool. Loopback only: nothing on the
+# network can reach it.
+ai_listen_host: "127.0.0.1"
+ai_listen_port: 8080
+
+# Seconds of inactivity after which llama-swap unloads a model and gives its
+# VRAM and RAM back. The service itself keeps running and loads the model
+# again on the next request (a few seconds from the page cache, longer from
+# disk). 0 never unloads.
+ai_model_ttl: 600
+
+# Model the launcher opens the chat with ("ai chat" without arguments).
+ai_default_model: "qwen3.6-35b-a3b"
+
+# ------------------------------------------------------------------------------
+# Models
+# ------------------------------------------------------------------------------
+# One entry per model llama-swap can serve. Fields:
+#   id        name used in API requests and in "ai chat <id>"
+#   name      display name in the UIs
+#   hf_repo   Hugging Face repository with the GGUF files
+#   quant     quantization to download (e.g. Q4_K_M); the models role picks the
+#             single .gguf file in the repository whose name ends with it.
+#             Set "file" instead when the repository has several matches.
+#   file      optional: exact path of the .gguf file inside the repository
+#   ctx_size  context length in tokens; longer contexts use more memory
+#   args      optional: extra llama-server arguments for this model
+#   download  false keeps the entry out of the download and of llama-swap
+#
+# GPU offload: llama-server's --fit (on by default) works out at load time how
+# many layers, and for mixture-of-experts models how many experts, fit in the
+# free VRAM, and leaves the rest in RAM. No -ngl or --n-cpu-moe is needed
+# unless the benchmark shows that a manual value is faster.
+#
+# The three models below are the phase 1 candidates (docs/plan.md). They take
+# about 45 GB of disk together; set download: false on the ones you do not
+# want. Repository names are checked on the first run: a wrong one fails with
+# the Hugging Face error.
+ai_models:
+  # Main candidate: mixture of experts, 35B parameters with about 3B active
+  # per token. Most of the weights stay in RAM, the GPU holds attention, the
+  # KV cache and as many experts as fit.
+  - id: "qwen3.6-35b-a3b"
+    name: "Qwen3.6 35B-A3B"
+    hf_repo: "unsloth/Qwen3.6-35B-A3B-GGUF"
+    quant: "Q4_K_M"
+    ctx_size: 32768
+    download: true
+
+  # Alternative mixture of experts, about 4B active parameters.
+  - id: "gemma-4-26b-a4b"
+    name: "Gemma 4 26B-A4B"
+    hf_repo: "unsloth/gemma-4-26B-A4B-it-GGUF"
+    quant: "Q4_K_M"
+    ctx_size: 32768
+    download: true
+
+  # Small dense model that fits entirely in the 8 GB of VRAM: the fastest,
+  # for quick questions.
+  - id: "qwen3.5-9b"
+    name: "Qwen3.5 9B"
+    hf_repo: "unsloth/Qwen3.5-9B-GGUF"
+    quant: "Q4_K_M"
+    ctx_size: 32768
+    download: true

@@ -1,0 +1,6 @@
+---
+# Desktop launchers in the applications menu (~/.local/share/applications).
+launcher_applications_dir: "{{ ai_home }}/.local/share/applications"
+
+# Seconds "ai on" waits for llama-swap to answer before giving up.
+launcher_start_timeout: 20

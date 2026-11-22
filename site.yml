@@ -1,0 +1,62 @@
+---
+# ==============================================================================
+# Local AI workstation: configuration and maintenance
+# ==============================================================================
+# Run it on the computer itself, as your own user (not with sudo):
+#   ansible-playbook site.yml -K
+#
+# -K asks for your sudo password, used only by the tasks that install packages
+# or change group membership. Everything else is written to your home
+# directory.
+#
+# Single area:
+#   ansible-playbook site.yml -K --tags llama-cpp
+#   ansible-playbook site.yml --tags models      (no sudo needed)
+#
+# Tags: gpu, llama-cpp, models, llama-swap, launcher
+# ==============================================================================
+
+- name: Configure the local AI workstation
+  hosts: workstation
+  gather_facts: true
+
+  pre_tasks:
+    # Zorin OS 18 is built on Ubuntu 24.04 (noble) and reports its codename:
+    # the package names and versions in the roles are those of noble.
+    - name: Check that the computer runs Zorin OS 18 or Ubuntu 24.04
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['os_family'] == 'Debian'
+          - ansible_facts['distribution_release'] == 'noble'
+        fail_msg: >-
+          This playbook targets Zorin OS 18 / Ubuntu 24.04 (noble); the
+          computer reports {{ ansible_facts['distribution'] }}
+          {{ ansible_facts['distribution_version'] }}
+          ({{ ansible_facts['distribution_release'] }}).
+        quiet: true
+      tags: always
+
+    # Running the whole playbook with sudo would install everything under
+    # /root and leave the service to the wrong user.
+    - name: Check that the playbook runs as a regular user
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['user_uid'] | int != 0
+        fail_msg: >-
+          Run the playbook as your own user ("ansible-playbook site.yml -K"),
+          not as root or with sudo.
+        quiet: true
+      when: not (ai_allow_root | default(false) | bool)
+      tags: always
+
+  roles:
+    - role: gpu_vulkan
+      tags: [gpu]
+    - role: llama_cpp
+      tags: [llama-cpp]
+    - role: models
+      tags: [models]
+    - role: llama_swap
+      tags: [llama-swap]
+    - role: launcher
+      tags: [launcher]

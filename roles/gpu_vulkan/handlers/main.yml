@@ -1,0 +1,7 @@
+---
+- name: Remind to log out after the group change
+  ansible.builtin.debug:
+    msg: >-
+      {{ ansible_facts['user_id'] }} was added to the GPU groups
+      ({{ gpu_vulkan_groups | join(', ') }}): log out and back in before
+      starting the service.

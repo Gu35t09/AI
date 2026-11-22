@@ -1,0 +1,43 @@
+---
+- name: Install the Vulkan driver and tools
+  ansible.builtin.apt:
+    name: "{{ gpu_vulkan_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+# Both groups exist on a Zorin/Ubuntu desktop (created by systemd-udev); a
+# missing one is skipped rather than created, since nothing would own it.
+- name: Read the system groups
+  ansible.builtin.getent:
+    database: group
+
+- name: Add the user to the GPU groups
+  ansible.builtin.user:
+    name: "{{ ansible_facts['user_id'] }}"
+    groups: "{{ gpu_vulkan_groups | select('in', ansible_facts['getent_group']) | list }}"
+    append: true
+  become: true
+  notify: Remind to log out after the group change
+
+# vulkaninfo lists every Vulkan device. llvmpipe (the CPU fallback) is always
+# there; what matters is an AMD device driven by RADV.
+- name: List the Vulkan devices
+  ansible.builtin.command:
+    cmd: vulkaninfo --summary
+  register: gpu_vulkan_info
+  changed_when: false
+  failed_when: false
+
+- name: Check that the GPU is reachable through RADV
+  ansible.builtin.assert:
+    that:
+      - gpu_vulkan_info.rc == 0
+      - "'RADV' in gpu_vulkan_info.stdout"
+    fail_msg: >-
+      vulkaninfo does not show an AMD GPU on the RADV driver. Check the output
+      of "vulkaninfo --summary": the RX 5700 XT shows up as
+      "AMD Radeon RX 5700 XT (RADV NAVI10)".
+    quiet: true
+  when: gpu_vulkan_check_device | bool

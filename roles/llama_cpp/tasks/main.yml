@@ -1,0 +1,83 @@
+---
+# Each version is built in its own source directory and installed in its own
+# directory under ~/.local/opt/llama.cpp; "current" points to the one in use.
+# Changing llama_cpp_version builds the new one next to the old, then moves
+# the link: going back is a matter of moving the link again.
+
+- name: Install the build dependencies
+  ansible.builtin.apt:
+    name: "{{ llama_cpp_build_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Create the source and install directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ai_src_dir }}"
+    - "{{ ai_opt_dir }}/llama.cpp/{{ llama_cpp_version }}/bin"
+    - "{{ ai_bin_dir }}"
+
+- name: Download the llama.cpp sources
+  ansible.builtin.git:
+    repo: "{{ llama_cpp_repo }}"
+    dest: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}"
+    version: "{{ llama_cpp_version }}"
+    depth: 1
+    single_branch: true
+    update: false
+
+- name: Configure the build
+  ansible.builtin.command:
+    cmd: >-
+      cmake -B build {{ llama_cpp_cmake_options | join(' ') }}
+    chdir: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}"
+    creates: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}/build/CMakeCache.txt"
+
+# The Vulkan shaders make this the slow step: 10 to 20 minutes the first time.
+# "creates" skips it on later runs once the last target exists.
+- name: Build llama.cpp (takes a while)
+  ansible.builtin.command:
+    cmd: >-
+      cmake --build build --config Release
+      -j {{ llama_cpp_build_jobs }}
+      --target {{ llama_cpp_targets | join(' ') }}
+    chdir: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}"
+    creates: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}/build/bin/{{ llama_cpp_targets | last }}"
+
+- name: Install the binaries
+  ansible.builtin.copy:
+    src: "{{ ai_src_dir }}/llama.cpp-{{ llama_cpp_version }}/build/bin/{{ item }}"
+    dest: "{{ ai_opt_dir }}/llama.cpp/{{ llama_cpp_version }}/bin/{{ item }}"
+    remote_src: true
+    mode: "0755"
+  loop: "{{ llama_cpp_targets }}"
+
+- name: Point "current" to this version
+  ansible.builtin.file:
+    src: "{{ ai_opt_dir }}/llama.cpp/{{ llama_cpp_version }}"
+    dest: "{{ ai_opt_dir }}/llama.cpp/current"
+    state: link
+  notify: Restart llama-swap
+
+- name: Link the programs into ~/.local/bin
+  ansible.builtin.file:
+    src: "{{ llama_cpp_bin_dir }}/{{ item }}"
+    dest: "{{ ai_bin_dir }}/{{ item }}"
+    state: link
+    force: true
+  loop: "{{ llama_cpp_targets }}"
+
+- name: Check that the installed llama.cpp runs
+  ansible.builtin.command:
+    cmd: "{{ llama_cpp_bin_dir }}/llama-server --version"
+  register: llama_cpp_version_check
+  changed_when: false
+
+- name: Show the installed llama.cpp version
+  ansible.builtin.debug:
+    msg: "{{ (llama_cpp_version_check.stdout ~ llama_cpp_version_check.stderr) | trim }}"

@@ -1,0 +1,27 @@
+---
+# The "ai" command and two entries in the applications menu: "AI locale"
+# (start and open the chat) and "AI locale: spegni" (stop everything).
+
+- name: Create the launcher directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ai_bin_dir }}"
+    - "{{ launcher_applications_dir }}"
+
+- name: Install the ai command
+  ansible.builtin.template:
+    src: ai.sh.j2
+    dest: "{{ ai_bin_dir }}/ai"
+    mode: "0755"
+
+- name: Install the desktop launchers
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ launcher_applications_dir }}/{{ item }}"
+    mode: "0644"
+  loop:
+    - ai-chat.desktop
+    - ai-stop.desktop
