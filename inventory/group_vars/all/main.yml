@@ -27,8 +27,10 @@ ai_default_model: "qwen3.6-35b-a3b"
 #   id        name used in API requests and in "ai chat <id>"
 #   name      display name in the UIs
 #   hf_repo   Hugging Face repository with the GGUF files
-#   quant     quantization to download (e.g. Q4_K_M); the models role picks the
-#             single .gguf file in the repository whose name ends with it.
+#   quant     quantization to download (e.g. Q4_K_M, or UD-Q4_K_M for Unsloth's
+#             dynamic quantizations); the models role picks the single .gguf
+#             file in the repository whose name ends with it. When none
+#             matches, the error lists the files the repository has.
 #             Set "file" instead when the repository has several matches.
 #   file      optional: exact path of the .gguf file inside the repository
 #   ctx_size  context length in tokens; longer contexts use more memory
@@ -51,7 +53,8 @@ ai_models:
   - id: "qwen3.6-35b-a3b"
     name: "Qwen3.6 35B-A3B"
     hf_repo: "unsloth/Qwen3.6-35B-A3B-GGUF"
-    quant: "Q4_K_M"
+    # Unsloth publishes only its dynamic "UD-" quantizations for this model.
+    quant: "UD-Q4_K_M"          # 22.1 GB
     ctx_size: 32768
     download: true
 
@@ -59,7 +62,7 @@ ai_models:
   - id: "gemma-4-26b-a4b"
     name: "Gemma 4 26B-A4B"
     hf_repo: "unsloth/gemma-4-26B-A4B-it-GGUF"
-    quant: "Q4_K_M"
+    quant: "UD-Q4_K_M"          # 16.9 GB
     ctx_size: 32768
     download: true
 
