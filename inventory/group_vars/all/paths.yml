@@ -1,0 +1,25 @@
+---
+# ==============================================================================
+# Paths shared by the roles. Everything lives in the home directory of the
+# user who runs the playbook, following the XDG layout. There is normally no
+# reason to change these.
+# ==============================================================================
+ai_home: "{{ ansible_facts['user_dir'] }}"
+
+# Programs: one directory per version, "current" points to the one in use.
+ai_opt_dir: "{{ ai_home }}/.local/opt"
+# Sources downloaded for the build (llama.cpp).
+ai_src_dir: "{{ ai_home }}/.local/src"
+# Commands on the PATH (Zorin adds ~/.local/bin at login when it exists).
+ai_bin_dir: "{{ ai_home }}/.local/bin"
+# Configuration: llama-swap configuration and the list of downloaded models.
+ai_config_dir: "{{ ai_home }}/.config/ai"
+# GGUF model files.
+ai_models_dir: "{{ ai_home }}/.local/share/ai/models"
+# systemd user units.
+ai_systemd_user_dir: "{{ ai_home }}/.config/systemd/user"
+
+# llama.cpp binaries of the version in use (written by the llama_cpp role).
+llama_cpp_bin_dir: "{{ ai_opt_dir }}/llama.cpp/current/bin"
+# Models resolved and downloaded by the models role, read by llama_swap.
+ai_models_manifest: "{{ ai_config_dir }}/models.json"

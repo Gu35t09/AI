@@ -1,0 +1,41 @@
+# {{ ansible_managed }}
+# llama-swap configuration, written from inventory/group_vars/all/main.yml and
+# the list of downloaded models. Change those and run the playbook again:
+# manual changes to this file are overwritten.
+# Reference: https://github.com/mostlygeek/llama-swap/blob/main/docs/config.example.yaml
+
+# Loading a large model from a cold disk is slow: wait up to this many seconds.
+healthCheckTimeout: {{ llama_swap_health_timeout }}
+logLevel: info
+
+# Show "loading model..." in the chat while a model starts.
+sendLoadingState: true
+
+# Unload a model after this many seconds without requests, giving its VRAM and
+# RAM back to the desktop. 0 never unloads.
+globalTTL: {{ ai_model_ttl }}
+
+# Ports for the llama-server instances llama-swap starts, on loopback.
+startPort: 10001
+
+macros:
+  "server": >-
+    {{ llama_cpp_bin_dir }}/llama-server
+    --host 127.0.0.1
+    --port ${PORT}
+    {{ llama_swap_server_args | join(' ') }}
+
+models:
+{% for m in llama_swap_models %}
+  {{ m.id | to_json }}:
+    name: {{ m.name | default(m.id) | to_json }}
+    description: {{ (m.hf_repo ~ ' / ' ~ (m.path | basename)) | to_json }}
+    cmd: >-
+      ${server}
+      --model {{ m.local }}
+      --alias {{ m.id }}
+      --ctx-size {{ m.ctx_size | default(8192) }}
+{% if m.args | default('') %}
+      {{ m.args }}
+{% endif %}
+{% endfor %}

@@ -1,0 +1,76 @@
+---
+# llama-swap is a single binary: downloaded from its release, checked against
+# the published SHA-256, unpacked into ~/.local/opt/llama-swap/<version>.
+
+- name: Create the llama-swap directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}"
+    - "{{ ai_config_dir }}"
+    - "{{ ai_bin_dir }}"
+    - "{{ ai_systemd_user_dir }}"
+
+- name: Download the llama-swap release
+  ansible.builtin.get_url:
+    url: "{{ llama_swap_url }}"
+    dest: "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}/llama-swap.tar.gz"
+    checksum: "sha256:{{ llama_swap_sha256 }}"
+    mode: "0644"
+
+- name: Unpack llama-swap
+  ansible.builtin.unarchive:
+    src: "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}/llama-swap.tar.gz"
+    dest: "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}"
+    include: [llama-swap, LICENSE.md]
+    remote_src: true
+    creates: "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}/llama-swap"
+
+- name: Point "current" to this version
+  ansible.builtin.file:
+    src: "{{ ai_opt_dir }}/llama-swap/{{ llama_swap_version }}"
+    dest: "{{ ai_opt_dir }}/llama-swap/current"
+    state: link
+  notify: Restart llama-swap
+
+- name: Link llama-swap into ~/.local/bin
+  ansible.builtin.file:
+    src: "{{ ai_opt_dir }}/llama-swap/current/llama-swap"
+    dest: "{{ ai_bin_dir }}/llama-swap"
+    state: link
+    force: true
+
+# The configuration lists the models the models role downloaded.
+- name: Read the list of downloaded models
+  ansible.builtin.slurp:
+    src: "{{ ai_models_manifest }}"
+  register: llama_swap_manifest
+
+- name: Write the llama-swap configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ ai_config_dir }}/llama-swap.yaml"
+    mode: "0644"
+    validate: "{{ ai_opt_dir }}/llama-swap/current/llama-swap -validate -config %s"
+  vars:
+    llama_swap_models: "{{ llama_swap_manifest.content | b64decode | from_json }}"
+  # No restart: the service runs with -watch-config and reloads the file.
+
+- name: Install the systemd user service
+  ansible.builtin.template:
+    src: llama-swap.service.j2
+    dest: "{{ ai_systemd_user_dir }}/llama-swap.service"
+    mode: "0644"
+  notify:
+    - Reload systemd user units
+    - Restart llama-swap
+
+- name: Start llama-swap at login, or not
+  ansible.builtin.systemd_service:
+    name: llama-swap.service
+    scope: user
+    enabled: "{{ llama_swap_autostart | bool }}"
+    daemon_reload: true
+  when: ai_manage_user_systemd | default(true) | bool

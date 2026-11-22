@@ -1,0 +1,21 @@
+---
+# Handlers act on the user's systemd instance (systemctl --user). They need the
+# desktop session, or any login of the same user, to be running.
+
+- name: Reload systemd user units
+  ansible.builtin.systemd_service:
+    scope: user
+    daemon_reload: true
+  when: ai_manage_user_systemd | default(true) | bool
+
+# try-restart: restart only if it is running. A stopped service stays
+# stopped; it picks up the change the next time it starts. The systemd module
+# has no try-restart, hence the command.
+- name: Restart llama-swap
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: systemctl --user try-restart llama-swap.service
+  changed_when: true
+  # 5: the unit is not installed yet (first run, roles before llama_swap).
+  failed_when: llama_swap_restart.rc not in [0, 5]
+  register: llama_swap_restart
+  when: ai_manage_user_systemd | default(true) | bool

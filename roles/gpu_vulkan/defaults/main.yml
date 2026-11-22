@@ -1,0 +1,20 @@
+---
+# Vulkan driver and tools. The RX 5700 XT (RDNA 1, Navi 10) has no ROCm
+# support: llama.cpp reaches it through Vulkan, with Mesa's RADV driver.
+gpu_vulkan_packages:
+  - mesa-vulkan-drivers   # RADV, the open-source Vulkan driver for AMD
+  - libvulkan1            # Vulkan loader
+  - vulkan-tools          # vulkaninfo, to check the driver
+  - radeontop             # live GPU and VRAM usage, for the benchmarks
+
+# Groups that give access to the GPU device nodes (/dev/dri/renderD*). A
+# desktop session already has access through logind; the groups also cover
+# the systemd user service and SSH sessions. A new group takes effect at the
+# next login.
+gpu_vulkan_groups:
+  - render
+  - video
+
+# Fail when vulkaninfo does not list an AMD GPU on RADV. Set to false only to
+# test the playbook on a machine without the GPU.
+gpu_vulkan_check_device: true

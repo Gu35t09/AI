@@ -1,0 +1,41 @@
+---
+# llama.cpp release to build. Releases are tagged b<number>
+# (https://github.com/ggml-org/llama.cpp/releases): to update, change the tag
+# and run the playbook with --tags llama-cpp (docs/maintenance.md).
+llama_cpp_version: "b12634"
+llama_cpp_repo: "https://github.com/ggml-org/llama.cpp.git"
+
+# Build dependencies on Ubuntu 24.04. glslc compiles the Vulkan shaders,
+# spirv-headers is required by the Vulkan backend, libssl-dev lets llama.cpp
+# download over HTTPS.
+llama_cpp_build_packages:
+  - build-essential
+  - cmake
+  - git
+  - pkg-config
+  - libvulkan-dev
+  - glslc
+  - spirv-headers
+  - libssl-dev
+
+# CMake options. Static libraries make the installed binaries self-contained:
+# they can be copied out of the build tree and an old version keeps working
+# after a new one is built.
+llama_cpp_cmake_options:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DGGML_VULKAN=ON"
+  - "-DBUILD_SHARED_LIBS=OFF"
+  - "-DLLAMA_BUILD_TESTS=OFF"
+  - "-DLLAMA_BUILD_EXAMPLES=OFF"
+
+# Programs built and installed:
+#   llama-server  inference server with the built-in chat (used by llama-swap)
+#   llama-bench   speed measurements (phase 1)
+#   llama-cli     command-line chat, handy for quick tests
+llama_cpp_targets:
+  - llama-server
+  - llama-bench
+  - llama-cli
+
+# Parallel compile jobs: one per CPU thread (12 on the Ryzen 5 3600XT).
+llama_cpp_build_jobs: "{{ ansible_facts['processor_nproc'] }}"

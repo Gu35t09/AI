@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# ai: start, stop and use the local models.
+#   ai on              start llama-swap (no model is loaded until a request)
+#   ai off             stop llama-swap and every model: VRAM and RAM are freed
+#   ai status          service state and loaded models
+#   ai chat [model]    start if needed and open the chat in the browser
+#   ai ui              open the llama-swap page (models, logs, playground)
+#   ai models          list the configured models
+#   ai unload          unload the loaded models, leaving the service running
+#   ai logs            follow the service log
+set -euo pipefail
+
+URL="http://{{ ai_listen_host }}:{{ ai_listen_port }}"
+DEFAULT_MODEL={{ ai_default_model | quote }}
+UNIT="llama-swap.service"
+START_TIMEOUT={{ launcher_start_timeout }}
+
+usage() {
+  sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+is_up() {
+  curl -fsS --max-time 2 "$URL/health" >/dev/null 2>&1
+}
+
+start() {
+  if is_up; then
+    return 0
+  fi
+  systemctl --user start "$UNIT"
+  for _ in $(seq "$START_TIMEOUT"); do
+    if is_up; then
+      echo "AI locale avviata su $URL"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "llama-swap non risponde dopo ${START_TIMEOUT}s: ai logs" >&2
+  exit 1
+}
+
+open_url() {
+  xdg-open "$1" >/dev/null 2>&1 &
+}
+
+case "${1:-help}" in
+  on)
+    start
+    ;;
+  off)
+    systemctl --user stop "$UNIT"
+    echo "AI locale spenta"
+    ;;
+  status)
+    if is_up; then
+      echo "llama-swap attivo su $URL"
+      echo "Modelli caricati:"
+      curl -fsS "$URL/running" | python3 -c '
+import json, sys
+running = json.load(sys.stdin).get("running", [])
+print("\n".join("  " + m.get("model", "?") + " (" + m.get("state", "?") + ")" for m in running) or "  nessuno")'
+    else
+      echo "llama-swap spento"
+    fi
+    ;;
+  chat)
+    start
+    # The upstream path serves the llama-server chat of that model; the first
+    # request loads the model (a few seconds, longer the first time).
+    open_url "$URL/upstream/${2:-$DEFAULT_MODEL}/"
+    ;;
+  ui)
+    start
+    open_url "$URL/ui/"
+    ;;
+  models)
+    start >/dev/null
+    curl -fsS "$URL/v1/models" | python3 -c '
+import json, sys
+for m in json.load(sys.stdin)["data"]:
+    print(m["id"])'
+    ;;
+  unload)
+    curl -fsS -X POST "$URL/api/models/unload" >/dev/null
+    echo "Modelli scaricati dalla memoria"
+    ;;
+  logs)
+    journalctl --user -u "$UNIT" -f
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

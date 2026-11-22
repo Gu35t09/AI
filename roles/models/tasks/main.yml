@@ -1,0 +1,99 @@
+---
+# For each model with download: true
+#   1. ask the Hugging Face API for the repository's files;
+#   2. pick the .gguf file (the one named in "file", or the single one whose
+#      name ends with the quantization);
+#   3. download it, checked against the SHA-256 Hugging Face publishes;
+# then write models.json, the list llama_swap builds its configuration from.
+# A file that is already there with the right checksum is not downloaded again.
+
+- name: Create the models directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ai_models_dir }}"
+    - "{{ ai_config_dir }}"
+
+- name: List the files of each model repository
+  ansible.builtin.uri:
+    url: "{{ models_hf_api }}/{{ item.hf_repo }}/tree/main?recursive=true"
+    return_content: true
+  register: models_tree
+  loop: "{{ ai_models | rejectattr('download', 'false') | list }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+# A file matches the quantization when its name ends with "-<quant>.gguf" (or
+# "_" / "." before it). Unsloth's "UD-" dynamic quantizations share the suffix
+# and are excluded unless the quantization asked for starts with "UD-".
+# mmproj files (vision projectors) are never the model.
+- name: Find the candidate GGUF files of each model
+  ansible.builtin.set_fact:
+    models_candidates: "{{ models_candidates | default([]) + [{'model': item.item, 'matches': matches}] }}"
+  vars:
+    gguf: >-
+      {{ item.content | from_json
+         | selectattr('type', 'equalto', 'file')
+         | selectattr('path', 'search', '\.gguf$')
+         | rejectattr('path', 'search', '(?i)mmproj')
+         | list }}
+    wanted_file: "{{ item.item.file | default('') }}"
+    quant_re: >-
+      {{ '(?i)' ~ ('' if item.item.quant | default('') is match('(?i)UD-') else '(?<!UD)')
+         ~ '[-_.]' ~ (item.item.quant | default('') | regex_escape) ~ '\.gguf$' }}
+    matches: >-
+      {{ (gguf | selectattr('path', 'equalto', wanted_file) | list)
+         if wanted_file else
+         (gguf | selectattr('path', 'search', quant_re) | list) }}
+  loop: "{{ models_tree.results }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
+- name: Check that each model has exactly one file
+  ansible.builtin.assert:
+    that:
+      - item.matches | length == 1
+    fail_msg: >-
+      {{ item.model.id }}: {{ item.matches | length }} files in {{ item.model.hf_repo }}
+      match {{ item.model.file | default(item.model.quant) }}
+      ({{ item.matches | map(attribute='path') | join(', ') or 'none' }}).
+      Set "file" to the exact path in inventory/group_vars/all/main.yml.
+      Models split into several files (-00001-of-0000N) are not supported.
+    quiet: true
+  loop: "{{ models_candidates | default([]) }}"
+  loop_control:
+    label: "{{ item.model.id }}"
+
+- name: Record the file, checksum and size of each model
+  ansible.builtin.set_fact:
+    models_resolved: >-
+      {{ models_resolved | default([]) + [item.model | combine({
+           'path': picked.path,
+           'sha256': picked.lfs.oid,
+           'size': picked.lfs.size,
+           'local': ai_models_dir ~ '/' ~ (picked.path | basename)})] }}
+  vars:
+    picked: "{{ item.matches | first }}"
+  loop: "{{ models_candidates | default([]) }}"
+  loop_control:
+    label: "{{ item.model.id }}"
+
+- name: Download the models (tens of GB the first time)
+  ansible.builtin.get_url:
+    url: "{{ models_hf_resolve }}/{{ item.hf_repo }}/resolve/main/{{ item.path }}"
+    dest: "{{ item.local }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0644"
+    timeout: "{{ models_download_timeout }}"
+  loop: "{{ models_resolved | default([]) }}"
+  loop_control:
+    label: "{{ item.id }}: {{ item.path }} ({{ (item.size / 1024**3) | round(1) }} GB)"
+
+- name: Write the list of downloaded models
+  ansible.builtin.copy:
+    dest: "{{ ai_models_manifest }}"
+    content: "{{ models_resolved | default([]) | to_nice_json }}\n"
+    mode: "0644"
+  notify: Restart llama-swap

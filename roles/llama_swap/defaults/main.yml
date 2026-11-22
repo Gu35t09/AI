@@ -1,0 +1,32 @@
+---
+# llama-swap release (https://github.com/mostlygeek/llama-swap/releases) and
+# the SHA-256 of its linux_amd64 archive, from llama-swap_<n>_checksums.txt of
+# the same release. Update both together (docs/maintenance.md).
+llama_swap_version: "275"
+llama_swap_sha256: "a7fa5946e054783d4c4a5e2ab8f3ddd467de0805519f6b6f2a41508ae453fbe8"
+llama_swap_url: >-
+  https://github.com/mostlygeek/llama-swap/releases/download/v{{ llama_swap_version }}/llama-swap_{{ llama_swap_version }}_linux_amd64.tar.gz
+
+# Seconds llama-swap waits for a model to load before giving up. Loading a
+# 20 GB model from a cold disk takes a while.
+llama_swap_health_timeout: 600
+
+# llama-server arguments common to every model. Model-specific ones go in the
+# model's "args" (inventory/group_vars/all/main.yml).
+#   --jinja                  use the chat template embedded in the GGUF
+#   --flash-attn on          less memory for the KV cache, needed by the
+#                            quantized cache below
+#   --cache-type-k/-v q8_0   KV cache at 8 bits: half the memory of f16 for a
+#                            negligible quality loss, so longer contexts fit
+#   --parallel 1             one conversation at a time: the whole context is
+#                            available to it
+llama_swap_server_args:
+  - "--jinja"
+  - "--flash-attn on"
+  - "--cache-type-k q8_0"
+  - "--cache-type-v q8_0"
+  - "--parallel 1"
+
+# Start llama-swap at login. false: it runs only when started with "ai on",
+# "ai chat" or the desktop launcher.
+llama_swap_autostart: false

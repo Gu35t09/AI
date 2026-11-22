@@ -1,0 +1,10 @@
+---
+# The list of models (ai_models) is a site setting: inventory/group_vars/all/main.yml.
+
+# Hugging Face endpoints: the API lists the files of a repository with their
+# SHA-256, the resolve URL serves the file.
+models_hf_api: "https://huggingface.co/api/models"
+models_hf_resolve: "https://huggingface.co"
+
+# Seconds a download may go without receiving data before it is abandoned.
+models_download_timeout: 300

@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+# llama-swap: one endpoint on {{ ai_listen_host }}:{{ ai_listen_port }} for the chat and the API. It starts
+# a llama-server for the model a request asks for, and stops it after
+# {{ ai_model_ttl }} seconds without requests.
+#   ai on | ai off | ai status        (or systemctl --user start|stop|status llama-swap)
+
+[Unit]
+Description=llama-swap: local AI models on demand
+Documentation=https://github.com/mostlygeek/llama-swap
+
+[Service]
+Type=simple
+ExecStart={{ ai_opt_dir }}/llama-swap/current/llama-swap \
+    -config {{ ai_config_dir }}/llama-swap.yaml \
+    -listen {{ ai_listen_host }}:{{ ai_listen_port }} \
+    -watch-config
+Restart=on-failure
+RestartSec=5
+# Let the running llama-server instances exit cleanly on stop.
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
