@@ -64,11 +64,30 @@ How big a model fits: as a rule of thumb, at Q4_K_M a model takes about 0.6 GB p
 
 ### Remove a model
 
-Set `download: false` (or delete the entry), run `--tags models,llama-swap`, then delete the file from `~/.local/share/ai/models/`: the playbook never deletes models.
+Set `download: false` (or delete the entry), run `--tags models,llama-swap`, then delete the file and its `.sha256` from `~/.local/share/ai/models/`: the playbook never deletes models.
 
 ### Change context size or arguments
 
 Edit `ctx_size` or `args` of the model, then `--tags models,llama-swap`. A longer context uses more memory: if the model no longer loads, `ai logs` shows the allocation error.
+
+## Downloads
+
+The models role downloads with `curl` into `<name>.part` in `~/.local/share/ai/models/`. The playbook shows no progress bar; from a second terminal:
+
+```bash
+watch -n 5 ls -lh ~/.local/share/ai/models/
+```
+
+The `.part` file grows; when the model is verified it becomes `<name>.gguf` with a `<name>.gguf.sha256` next to it.
+
+| What happened | What to do |
+| --- | --- |
+| Run stopped, computer off, "the download is incomplete" | run the playbook again: it resumes from the `.part` file |
+| "the file is complete but its SHA-256 is ..." | the file was deleted; run the playbook again to download it once more |
+| The SHA-256 error comes back on the same or different models | the data gets damaged on the way or on the computer: try another network (or without VPN); check the disk (`sudo smartctl -a` on it, from `smartmontools`) and the RAM with memtest86+ (`sudo apt install memtest86+`, then choose it in the boot menu): a faulty RAM module corrupts large files |
+| Check a model by hand | `sha256sum ~/.local/share/ai/models/<name>.gguf` must equal the SHA-256 on the file's Hugging Face page and in `<name>.gguf.sha256` |
+
+To force a model to be checked again, delete its `.sha256` file: the next run hashes it, and downloads it again if it does not match.
 
 ## Change port or idle time
 

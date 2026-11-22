@@ -39,7 +39,9 @@ The models are GGUF files from Hugging Face, listed in `ai_models` (`inventory/g
 | --- | --- |
 | List the files of each repository | Hugging Face API (`/api/models/<repo>/tree/main`): file names, sizes and the SHA-256 of each file. |
 | Find the candidate files / check exactly one | a model names either its exact `file` or a `quant` such as `Q4_K_M`; the file whose name ends with `-Q4_K_M.gguf` is picked. Unsloth's `UD-` variants share the suffix and are excluded unless asked for (`quant: UD-Q4_K_M`); `mmproj` files (vision add-ons) are never picked. No match or more than one stops the run with the list of candidates, rather than downloading the wrong 20 GB. |
-| Download | `get_url` with the published SHA-256: a corrupt download fails, and a file already present with the right checksum is not downloaded again. |
+| Download (`download.yml`, one model at a time) | with `curl` into `<name>.part` next to its final place. `--continue-at -` resumes from what is already there, so an interrupted download (dropped connection, playbook stopped, computer turned off) continues on the next run instead of starting over; `--retry` resumes dropped connections within the same run. The growing `.part` file shows the progress. |
+| Check the size, then the SHA-256 | a short file is an interrupted download: the run stops and the next one resumes. A complete file whose SHA-256 differs from the one Hugging Face publishes is corrupt: it is deleted and downloaded again on the next run. Only a verified file is moved to its final name. |
+| Record the verified checksum | `<name>.sha256` next to the model: later runs compare it and the size instead of hashing tens of GB again, so they skip the model in a second. |
 | Write the list of downloaded models | `~/.config/ai/models.json`: id, name, local path, context size, extra arguments. llama_swap builds its configuration from it, so the two roles can run separately. |
 
 Models with `download: false` are skipped and do not appear in llama-swap. Files of models removed from the list stay on disk (see maintenance).
