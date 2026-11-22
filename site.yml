@@ -21,19 +21,34 @@
   gather_facts: true
 
   pre_tasks:
-    # Zorin OS 18 is built on Ubuntu 24.04 (noble) and reports its codename:
-    # the package names and versions in the roles are those of noble.
+    # Zorin OS 18 is built on Ubuntu 24.04 (noble): the package names and
+    # versions in the roles are those of noble. The check reads /etc/os-release
+    # itself: Ansible does not list Zorin OS among the Debian derivatives, so
+    # its os_family fact reads "Zorin OS" rather than "Debian".
+    - name: Read /etc/os-release
+      ansible.builtin.slurp:
+        src: "{{ ai_os_release_file | default('/etc/os-release') }}"
+      register: ai_os_release_raw
+      tags: always
+
     - name: Check that the computer runs Zorin OS 18 or Ubuntu 24.04
       ansible.builtin.assert:
         that:
-          - ansible_facts['os_family'] == 'Debian'
-          - ansible_facts['distribution_release'] == 'noble'
+          - "'ubuntu' in ([os_release.ID | default('')] + (os_release.ID_LIKE | default('')).split())"
+          - (os_release.UBUNTU_CODENAME | default(os_release.VERSION_CODENAME | default(''))) == 'noble'
         fail_msg: >-
-          This playbook targets Zorin OS 18 / Ubuntu 24.04 (noble); the
-          computer reports {{ ansible_facts['distribution'] }}
-          {{ ansible_facts['distribution_version'] }}
-          ({{ ansible_facts['distribution_release'] }}).
+          This playbook targets Zorin OS 18 / Ubuntu 24.04 (noble); /etc/os-release
+          reports {{ os_release.PRETTY_NAME | default('?') }}
+          (ID={{ os_release.ID | default('') }}, ID_LIKE={{ os_release.ID_LIKE | default('') }},
+          UBUNTU_CODENAME={{ os_release.UBUNTU_CODENAME | default('') }}).
         quiet: true
+      vars:
+        # The few KEY=value lines needed, without the optional double quotes.
+        os_release: >-
+          {{ dict((ai_os_release_raw.content | b64decode).splitlines()
+                  | select('match', '^(ID|ID_LIKE|VERSION_CODENAME|UBUNTU_CODENAME|PRETTY_NAME)=')
+                  | map('regex_replace', '"', '')
+                  | map('split', '=')) }}
       tags: always
 
     # Running the whole playbook with sudo would install everything under

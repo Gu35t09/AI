@@ -4,7 +4,7 @@ What each role does, task by task, and why. The roles run in the order of `site.
 
 Before the roles, two checks stop the run early:
 
-- **Zorin OS 18 / Ubuntu 24.04**: package names and versions are those of Ubuntu noble, which Zorin OS 18 is built on.
+- **Zorin OS 18 / Ubuntu 24.04**: package names and versions are those of Ubuntu noble, which Zorin OS 18 is built on. The check reads `/etc/os-release` (`ID`/`ID_LIKE` must include `ubuntu`, `UBUNTU_CODENAME` must be `noble`) instead of Ansible's distribution facts: Ansible does not list Zorin OS among the Debian derivatives, so on Zorin its `os_family` reads `Zorin OS`.
 - **Not root**: the playbook installs into the home directory of the user who runs it. Run with `sudo`, it would install under `/root` and the service would belong to the wrong user. Root is obtained per task with `become: true`, which is why the playbook is run with `-K`.
 
 ## gpu_vulkan (tag `gpu`)
