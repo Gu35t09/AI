@@ -31,7 +31,9 @@
 # mmproj files (vision projectors) are never the model.
 - name: Find the candidate GGUF files of each model
   ansible.builtin.set_fact:
-    models_candidates: "{{ models_candidates | default([]) + [{'model': item.item, 'matches': matches}] }}"
+    models_candidates: >-
+      {{ models_candidates | default([])
+         + [{'model': item.item, 'matches': matches, 'available': gguf | map(attribute='path') | list}] }}
   vars:
     gguf: >-
       {{ item.content | from_json
@@ -59,7 +61,9 @@
       {{ item.model.id }}: {{ item.matches | length }} files in {{ item.model.hf_repo }}
       match {{ item.model.file | default(item.model.quant) }}
       ({{ item.matches | map(attribute='path') | join(', ') or 'none' }}).
-      Set "file" to the exact path in inventory/group_vars/all/main.yml.
+      GGUF files in the repository: {{ item.available | join(', ') or 'none' }}.
+      Set "quant" to one of their suffixes, or "file" to the exact path, in
+      inventory/group_vars/all/main.yml.
       Models split into several files (-00001-of-0000N) are not supported.
     quiet: true
   loop: "{{ models_candidates | default([]) }}"
