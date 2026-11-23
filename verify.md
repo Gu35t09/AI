@@ -40,7 +40,7 @@ ls -lh ~/.local/share/ai/models/
 cat ~/.config/ai/models.json
 ```
 
-One `.gguf` file per model with `download: true`.
+One `.gguf` file per model with `download: true`, each with a `.gguf.sha256` next to it (written only after the SHA-256 matched) and no `.part` file left over.
 
 ## 5. llama-swap
 

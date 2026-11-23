@@ -1,0 +1,122 @@
+---
+# Download one model (loop variable "model", from models_resolved).
+#
+# The file is downloaded to <name>.part next to its final place, with curl:
+# an interrupted download resumes where it stopped on the next run instead of
+# starting over, and the .part file shows the progress:
+#   watch -n 5 ls -lh ~/.local/share/ai/models/
+# Once complete it is checked: first the size (a short file is an interrupted
+# download), then the SHA-256 published by Hugging Face (a complete file that
+# does not match is corrupt and is deleted). Only then is it moved to <name>,
+# and <name>.sha256 records the verified checksum, so later runs skip the
+# model without hashing tens of GB again.
+
+- name: "Check what is already on disk: {{ model.id }}"
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    get_checksum: false
+  loop:
+    - "{{ model.local }}"
+    - "{{ model.local }}.sha256"
+    - "{{ model.local }}.part"
+  register: models_dl_stat
+
+- name: "Read the recorded checksum: {{ model.id }}"
+  ansible.builtin.slurp:
+    src: "{{ model.local }}.sha256"
+  register: models_dl_marker
+  when: models_dl_stat.results[1].stat.exists
+
+- name: "Download and verify: {{ model.id }}"
+  when: not models_dl_verified
+  vars:
+    models_dl_verified: >-
+      {{ models_dl_stat.results[0].stat.exists
+         and models_dl_stat.results[0].stat.size == model.size
+         and models_dl_stat.results[1].stat.exists
+         and (models_dl_marker.content | default('') | b64decode | trim) == model.sha256 }}
+  block:
+    # A .part larger than the file cannot be resumed.
+    - name: "Discard an oversized partial file: {{ model.id }}"
+      ansible.builtin.file:
+        path: "{{ model.local }}.part"
+        state: absent
+      when:
+        - models_dl_stat.results[2].stat.exists
+        - models_dl_stat.results[2].stat.size > model.size
+
+    # --continue-at -: resume from the size of the .part file. --retry with
+    # --retry-all-errors retries dropped connections, resuming each time.
+    # --speed-limit/--speed-time abandon a transfer stalled for
+    # models_download_timeout seconds (then a retry starts).
+    - name: "Download (resumes an interrupted download): {{ model.id }}"
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --fail
+          - --location
+          - --silent
+          - --show-error
+          - --continue-at
+          - "-"
+          - --retry
+          - "{{ models_download_retries }}"
+          - --retry-all-errors
+          - --retry-delay
+          - "10"
+          - --speed-limit
+          - "1024"
+          - --speed-time
+          - "{{ models_download_timeout }}"
+          - --output
+          - "{{ model.local }}.part"
+          - "{{ models_hf_resolve }}/{{ model.hf_repo }}/resolve/main/{{ model.path }}"
+      changed_when: true
+      when: >-
+        not models_dl_stat.results[2].stat.exists
+        or models_dl_stat.results[2].stat.size != model.size
+
+    - name: "Check the downloaded file: {{ model.id }}"
+      ansible.builtin.stat:
+        path: "{{ model.local }}.part"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: models_dl_part
+
+    - name: "Check the size: {{ model.id }}"
+      ansible.builtin.assert:
+        that:
+          - models_dl_part.stat.size == model.size
+        fail_msg: >-
+          {{ model.id }}: the download is incomplete
+          ({{ models_dl_part.stat.size }} of {{ model.size }} bytes). Run the
+          playbook again: it resumes from {{ model.local }}.part.
+        quiet: true
+
+    - name: "Delete a corrupt file: {{ model.id }}"
+      ansible.builtin.file:
+        path: "{{ model.local }}.part"
+        state: absent
+      when: models_dl_part.stat.checksum != model.sha256
+
+    - name: "Check the SHA-256: {{ model.id }}"
+      ansible.builtin.assert:
+        that:
+          - models_dl_part.stat.checksum == model.sha256
+        fail_msg: >-
+          {{ model.id }}: the file is complete but its SHA-256 is
+          {{ models_dl_part.stat.checksum }}, not {{ model.sha256 }} as published
+          by Hugging Face. It has been deleted; the next run downloads it again.
+          If this happens again, see "Downloads" in docs/maintenance.md.
+        quiet: true
+
+    - name: "Move the verified file into place: {{ model.id }}"
+      ansible.builtin.command:
+        argv: [mv, -f, "{{ model.local }}.part", "{{ model.local }}"]
+      changed_when: true
+
+    - name: "Record the verified checksum: {{ model.id }}"
+      ansible.builtin.copy:
+        dest: "{{ model.local }}.sha256"
+        content: "{{ model.sha256 }}\n"
+        mode: "0644"

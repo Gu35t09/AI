@@ -6,5 +6,9 @@
 models_hf_api: "https://huggingface.co/api/models"
 models_hf_resolve: "https://huggingface.co"
 
-# Seconds a download may go without receiving data before it is abandoned.
-models_download_timeout: 300
+# Seconds a download may stay below 1 KB/s before curl drops the connection
+# and retries, resuming where it stopped.
+models_download_timeout: 120
+
+# Retries of a dropped or stalled download within one run.
+models_download_retries: 20

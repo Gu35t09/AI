@@ -3,9 +3,15 @@
 #   1. ask the Hugging Face API for the repository's files;
 #   2. pick the .gguf file (the one named in "file", or the single one whose
 #      name ends with the quantization);
-#   3. download it, checked against the SHA-256 Hugging Face publishes;
+#   3. download it, resuming an interrupted download, and check its size and
+#      the SHA-256 Hugging Face publishes (download.yml);
 # then write models.json, the list llama_swap builds its configuration from.
-# A file that is already there with the right checksum is not downloaded again.
+
+- name: Install curl, used for the downloads
+  ansible.builtin.apt:
+    name: curl
+    state: present
+  become: true
 
 - name: Create the models directory
   ansible.builtin.file:
@@ -84,16 +90,14 @@
   loop_control:
     label: "{{ item.model.id }}"
 
+# One model at a time: resumable download with curl, size and SHA-256 checks
+# (download.yml).
 - name: Download the models (tens of GB the first time)
-  ansible.builtin.get_url:
-    url: "{{ models_hf_resolve }}/{{ item.hf_repo }}/resolve/main/{{ item.path }}"
-    dest: "{{ item.local }}"
-    checksum: "sha256:{{ item.sha256 }}"
-    mode: "0644"
-    timeout: "{{ models_download_timeout }}"
+  ansible.builtin.include_tasks: download.yml
   loop: "{{ models_resolved | default([]) }}"
   loop_control:
-    label: "{{ item.id }}: {{ item.path }} ({{ (item.size / 1024**3) | round(1) }} GB)"
+    loop_var: model
+    label: "{{ model.id }}: {{ model.path }} ({{ (model.size / 1024**3) | round(1) }} GB)"
 
 - name: Write the list of downloaded models
   ansible.builtin.copy:
